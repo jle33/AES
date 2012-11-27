@@ -4,7 +4,7 @@
 
  *
  *  Created on: Oct 26, 2012
- *      Author: jle33
+ *      Author:James B Le
  */
 #include <stdio.h>
 #include <iostream>
@@ -23,13 +23,11 @@ enum{
 vector<unsigned char> oneShift(vector<unsigned char> shiftme);
 vector<unsigned char> keyScheduleSubBytes(vector< unsigned char > w_i, vector< vector<unsigned char> > sbox);
 
-//const unsigned char Plaintext[] = "The cross-purposes was just our destiny after all And everything";
-const unsigned char Plaintext[] = "ATTACK AT DAWN!";
-//const unsigned char Plaintext[] = "328831e0435a3137f6309807a88da234";
-//const unsigned char Plaintext[] = {0x32, 0x43, 0xf6, 0xa8, 0x88, 0x5a, 0x30, 0x8d, 0x31, 0x31, 0x98, 0xa2, 0xe0, 0x37, 0x07, 0x34};
+int PlainTextSize = 0; //Keeping track the Size of the plain text for use in a function
+int LastByteTouched = 0; //Used to keep track of the last byte touched for the input bytes - used for combining multiple 16 by 16 blocks
 
-int LastByteTouched = 0;
 //128-bit key, so a 16 byte key
+/*Generates a 128bit key for use with AES*/
 void genKey(unsigned char* skey, int size){
 	static const unsigned char EnGen[] = "0123456789abcdefghiklmnopqrstuvyzABCDEFGHIJKLMNOPQRSTUVYZ";
 	const unsigned char maxAlSize = (sizeof(EnGen)-1);
@@ -39,6 +37,12 @@ void genKey(unsigned char* skey, int size){
 	}
 }
 
+
+/*The first step in AES is to add the roundkey to the initial input state.
+  The function will take in two vectors, an inputState and the first keyBlock of the Key Schedule 
+  it will than xor the inputState wit the first block of the Key Schedule which will give an output
+  state based on those two.
+*/
 //Tested Working!!
 vector< vector<unsigned char> > initialRound(vector< vector<unsigned char> > inputState, vector< vector<unsigned char> > keyBlock/*Round 0 Block*/){
 	vector< vector<unsigned char> > outputState(4, vector<unsigned char>(4));
@@ -51,6 +55,8 @@ vector< vector<unsigned char> > initialRound(vector< vector<unsigned char> > inp
 	return outputState;
 }
 
+/*The S-Box I decided to hardcode it instead of figuring out how to automate it each time AES is runned.
+Will return a 16 by 16 vector*/
 vector< vector<unsigned char> > getSBox(){
 	vector< vector<unsigned char> > sBox(16, vector<unsigned char>(16));
 	unsigned char S_Box[16][16] = {
@@ -79,7 +85,9 @@ vector< vector<unsigned char> > getSBox(){
 
 	return sBox;
 }
-//DONE!!!!
+/*The key Expansion function takes in the initial keyblock and the S-Box, which than will follow the AES standard for 
+expanding the key schedule. The Rcon is created automatically which that is used in the creation of the extra
+40 keys*/
 vector< vector<unsigned char> > keyExpansion(vector<vector<unsigned char> > keyblock, vector< vector<unsigned char> > SBox){
 	vector< vector<unsigned char> > keySchedule(4, vector<unsigned char>(44));
 	vector< vector<unsigned char> > Rcon(Rounds, vector<unsigned char>(4, 0)); //Switch up Rows and Columns
@@ -124,7 +132,7 @@ vector< vector<unsigned char> > keyExpansion(vector<vector<unsigned char> > keyb
 	int currentRconPos = 0;
 	//countdown timer to next 3 way XOR
 	int timer = 0;
-	
+	/*Next is the algorithem for the creation of the keys, the code below follows the steps required in its creation*/
 		for(int j = 3; j < 43; j++){ //The j+1 from the last store should finish it off. so everything is done.
 			if(timer == 0){
 				//Storing column into temp column
@@ -166,6 +174,7 @@ vector< vector<unsigned char> > keyExpansion(vector<vector<unsigned char> > keyb
 }
 
 //For the expanding key *subBytes* 1D
+/*This function is for the key Expansion, it does Substitution Bytes required*/
 vector<unsigned char> keyScheduleSubBytes(vector< unsigned char > w_i, vector< vector<unsigned char> > sbox){
 	unsigned char byte;
 	int row = 0;
@@ -179,6 +188,9 @@ vector<unsigned char> keyScheduleSubBytes(vector< unsigned char > w_i, vector< v
 	return w_i;
 }
 
+/*SubBytes function, basically it will just map the hex values within the inputState to the S-Box
+ex. Hex: 0x3e will be at (3,e) in the S-Box which is were you replace the values within the inputState
+of that of the S-Box state*/
 //Tested working!
 vector< vector<unsigned char> > subBytes(vector< vector<unsigned char> > inputState, vector< vector<unsigned char> > SBox){
 	vector< vector<unsigned char> > state(blockSize, vector<unsigned char>(blockSize));
@@ -197,6 +209,7 @@ vector< vector<unsigned char> > subBytes(vector< vector<unsigned char> > inputSt
 	return state;
 }
 
+/*ShiftRows -oneShift- this just shifts the rows once. Will be called based on how many times you want to shift*/
 //used in shiftRows and key Schedule, reason why this is not in shiftRows.
 vector<unsigned char> oneShift(vector<unsigned char> shiftme){
 	unsigned char temp = 0;
@@ -210,6 +223,8 @@ vector<unsigned char> oneShift(vector<unsigned char> shiftme){
 
 	return shiftme;
 }
+/*shiftRows this will just take in the inputstate and shift the rows based on the rows
+calls oneShift() to shift the rows*/
 //Tested working!
 vector< vector<unsigned char> > shiftRows(vector< vector<unsigned char> > inputState){
 	vector<vector<unsigned char> > state(blockSize, vector<unsigned char>(blockSize));
@@ -227,6 +242,9 @@ vector< vector<unsigned char> > shiftRows(vector< vector<unsigned char> > inputS
 	return state;
 }
 
+/*getr - Part of mix columns
+does the multiplication part of mix columns part
+*/
 unsigned char getr(unsigned char a_k, unsigned char hex){
 	if(hex == 0x01){
 		return a_k;
@@ -257,7 +275,9 @@ unsigned char getr(unsigned char a_k, unsigned char hex){
 	return a_k;
 }
 
-//Tested working!
+/*mixColumns - the inner most loop gets the value between two values specified by the mix columns
+it than saves the value within an array that will keep track of whats in the new row. Basically this 
+whole function does matrix muliplication but in a bitwise manner.*/
 vector<vector<unsigned char> > mixColumns(vector< vector<unsigned char> > inputState){
 	vector<vector<unsigned char> > state(blockSize, vector<unsigned char>(blockSize)); //make sure to declare sizes first
 	unsigned char rValues[4];
@@ -281,7 +301,7 @@ vector<vector<unsigned char> > mixColumns(vector< vector<unsigned char> > inputS
 	return state;
 }
 
-
+/*addRoundKey - This function does what it does, just adds the next round key to the inputState passed*/
 //Tested Working!
 vector<vector<unsigned char> > addRoundKey(vector< vector<unsigned char> > inputState, vector< vector<unsigned char> > roundKey){
 	vector<vector<unsigned char> > state(blockSize, vector<unsigned char> (blockSize)); //make sure to declare sizes first
@@ -293,14 +313,16 @@ vector<vector<unsigned char> > addRoundKey(vector< vector<unsigned char> > input
 	return state;
 }
 
-vector< vector<unsigned char> > convertToByteArray(const unsigned char array[], bool lastByte){
+/*This function will convert the array mainly the key and plaintext specified into a 4 by 4 matrix for
+the AES algorithem to work*/
+vector< vector<unsigned char> > convertToByteArray(const unsigned char array[], bool lastByte, int type){
 	vector< vector<unsigned char> > Block(blockSize, vector<unsigned char>(blockSize));
 	int increment = 0;
 	if(lastByte != 0)
 		increment = LastByteTouched;
 	for(int i = 0; i < blockSize; i++){
 		for (int j = 0; j < blockSize; j++){
-			if(increment >= sizeof(Plaintext)+1){
+			if((increment >= (PlainTextSize)) && (type == 1)){
 				Block[j][i] = 0x00;
 			}
 			else{
@@ -313,6 +335,7 @@ vector< vector<unsigned char> > convertToByteArray(const unsigned char array[], 
 	return Block;
 }
 
+//Prints whats in matrix in char format
 void printMatrixDebug(vector< vector<unsigned char> > TheBlock){
 	printf("\n");
 	printf("%c %c %c %c\n", TheBlock[0][0], TheBlock[0][1], TheBlock[0][2], TheBlock[0][3]);
@@ -321,7 +344,7 @@ void printMatrixDebug(vector< vector<unsigned char> > TheBlock){
 	printf("%c %c %c %c\n", TheBlock[3][0], TheBlock[3][1], TheBlock[3][2], TheBlock[3][3]);
 	printf("\n");
 }
-
+//Prints whats in matrix in hex format
 void printHexDebug(vector< vector<unsigned char> > TheBlock){
 	printf("\n");
 	printf("%x %x %x %x\n", (TheBlock[0][0] & 0xff), (TheBlock[0][1] & 0xff), (TheBlock[0][2] & 0xff), (TheBlock[0][3] & 0xff));
@@ -331,7 +354,7 @@ void printHexDebug(vector< vector<unsigned char> > TheBlock){
 	printf("\n");
 }
 
-
+/*This will get the next keyblock within the key schedule. The round key is based on the current round of the AES algorithem*/
 //Guess this works, don't need initialRound anymore
 //Getting Roundkey, ie round 0 is 0*4 = 0, round 1 is 1*4 = 4, round 2 is 2*4 = 8...etc for the starting position of each round
 vector< vector<unsigned char> > getRoundKey(vector< vector<unsigned char> > keySche, int curRound){
@@ -352,6 +375,7 @@ vector< vector<unsigned char> > getRoundKey(vector< vector<unsigned char> > keyS
 	return RoundBlock;
 }
 
+/*This function just converts the block array into a 1D array*/
 vector<unsigned char> convertBack(vector< vector<unsigned char> > output){
 	vector<unsigned char> arr(16);
 	int x = 0;
@@ -367,38 +391,142 @@ vector<unsigned char> convertBack(vector< vector<unsigned char> > output){
 
 int main(){
 	unsigned char key[KeySize];
-	const unsigned char tempkey[] = "SOME 128 BIT KEY";
-	//const unsigned char plaintext2[] = {0x32, 0x43, 0xf6, 0xa8, 0x88, 0x5a, 0x30, 0x8d, 0x31, 0x31, 0x98, 0xa2, 0xe0, 0x37, 0x07, 0x34};
-	//const unsigned char tempkey[] = {0x2b, 0x7e, 0x15, 0x16, 0x28, 0xae, 0xd2, 0xa6, 0xab, 0xf7, 0x15, 0x88, 0x09, 0xcf, 0x4f, 0x3c};
+	char UserChoice[2];
+	char stringr [16] = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
+	int choice = 0;
+	bool runit = true;
+	/*USER INTERFACE TEXT*/
+	/*
+	while(runit){
+	printf( "Please input either 1 for a 16 byte generated key or 2 for user specified key.  0 is to exit\n");
+	printf("UserChoice: ");
+	fgets(UserChoice, 3,stdin);
+	choice = atoi(UserChoice);
+		if(choice == 1){
+			genKey(key, KeySize);
+			printf("Key: ");
+			for(int i = 0; i < KeySize; i++){
+				printf("%c",key[i]);
+			}
+			printf("\n");
+			printf("Hex Version: ");
+			for(int i = 0; i < KeySize; i++){
+				printf("%x", key[i]);
+			}
+			printf("\n");
+			runit = false;
+		}else if(choice == 2){
+				printf("Please enter a 16 byte string\n");
+				printf("Your Key: " );
+				fgets(stringr, 17, stdin);
+				for(int i = 0; i < KeySize; i++){
+					key[i] = stringr[i];
+				}
+				printf("Key: ");
+				for(int i = 0; i < KeySize; i++){
+					printf("%c",key[i]);
+				}
+				printf("\n");
+				printf("Hex Version: ");
+				for(int i = 0; i < KeySize; i++){
+					printf("%x", key[i]);
+				}
+				printf("\n");
+				printf("Is this correct? Enter 1 to continue or 0 to try again\n");
+				printf("UserChoice: ");
+				fgets(UserChoice, 3, stdin);
+				choice = atoi(UserChoice);
+				if(choice == 1){
+					runit = false;
+				}else{
+					runit = true;
+				}
+				
+		}else if(choice == 0){
+			runit = false;
+			return 0;
+		}
+		else{
+			printf("Invalid input %d\n", choice);
+			printf("Please try again \n");
+		}
+	}
+	
+	*/
+	
 
+
+
+
+	/*###############################TEST CASE 1 Start#####################################*/
+	/*fips-197.pdf (http://csrc.nist.gov/publications/fips/fips197/fips-197.pdf)
+	Appendix B – Cipher Example
+	PlainText: 32 43 f6 a8 88 5a 30 8d 31 31 98 a2 e0 37 07 34 
+	Cipher Key: 2b 7e 15 16 28 ae d2 a6 ab f7 15 88 09 cf 4f 3c
+	*/
+	/*Used the website http://testprotect.com/appendix/AEScalc to test if it works
+	copy and paste the above PlainText and Cipher key into the two associated boxes.
+	*/
+	/*
+	printf("Plain Text\n");
+	const unsigned char Plaintext[] = {0x32, 0x43, 0xf6, 0xa8, 0x88, 0x5a, 0x30, 0x8d, 0x31, 0x31, 0x98, 0xa2, 0xe0, 0x37, 0x07, 0x34};
+	printf("%s\n", Plaintext);
+	PlainTextSize = sizeof(Plaintext);
+	const unsigned char EnterKey[] = {0x2b, 0x7e, 0x15, 0x16, 0x28, 0xae, 0xd2, 0xa6, 0xab, 0xf7, 0x15, 0x88, 0x09, 0xcf, 0x4f, 0x3c};
 	for(int i = 0; i < KeySize; i++){
-		key[i] = tempkey[i];
+		key[i] = EnterKey[i];
 	}
-	//genKey(key, KeySize);
-	printf("Key = ");
+	*/
+	/*###############################TEST CASE 1 End#####################################*/
+
+
+
+	/*###############################TEST CASE 2 Start#####################################*/
+	//Used the website http://people.eku.edu/styere/Encrypt/JS-AES.html to see whats happening.
+	
+	printf("Plain Text\n");
+	const unsigned char Plaintext[] = "THIS IS A TEST";
+	printf("%s\n", Plaintext);
+	PlainTextSize = sizeof(Plaintext);
+	const unsigned char EnterKey[] = {0xf6, 0xcc, 0x34, 0xcd, 0xc5, 0x55, 0xc5, 0x41, 0x82, 0x54, 0x26, 0x02, 0x03, 0xad, 0x3e, 0xcd };
 	for(int i = 0; i < KeySize; i++){
-		printf("%c",key[i]);
+		key[i] = EnterKey[i];
 	}
-	printf("\n");
+	
+	/*###############################TEST CASE 2 End#####################################*/
+
 	//Initilize S Box
 	vector< vector<unsigned char> > s_box = getSBox();
 	//conver Key to block Byte, than expand that key to 44 round keys
-	vector< vector<unsigned char> > keyBlock = convertToByteArray(key, false);
+	vector< vector<unsigned char> > keyBlock = convertToByteArray(key, false, 0);
+	//Expand the key
 	vector< vector<unsigned char> > keySchedule = keyExpansion(keyBlock, s_box);
 	//Get roundkey
 	vector< vector<unsigned char> > RoundKeyBlock = getRoundKey(keySchedule, 0);
-
+	//Convert to 2D Block
+	vector< vector<unsigned char> > inputState = convertToByteArray(Plaintext, false, 1);
+	
+	printf("\nINITIAL KEY");
 	printHexDebug(RoundKeyBlock);
-	vector< vector<unsigned char> > inputState = convertToByteArray(Plaintext, false);
+
+	printf("HEX VERSION OF PLAINTEXT");
 	printHexDebug(inputState);
 
-	//printMatrixDebug(keyBlock);
-	//printMatrixDebug(inputStateArray);
+	/*
+	printf("Round Key\n");
+	for(int i = 0; i <4; i++){
+		for(int j = 0; j < 44; j++){
+			if(j%4 == 0){
+				printf("\t");
+			}
+			printf("%x", keySchedule[i][j]);
+		}
+		printf("\n");
+	}*/
 
-	//vector< vector<unsigned char> > outputStateArray = initialRound(inputStateArray, keyBlock);
 
 	vector< vector<unsigned char> > outputState(4, vector<unsigned char>(4));
-
+	/*The algorithem for AES, this for loop just follows the steps for he AES algorithem*/
 	for(int i = 0; i < Rounds+1; i++){
 		printf("Round %d\n", i);
 		if(i == 0){
@@ -425,107 +553,20 @@ int main(){
 
 	}
 
+	printf("Block Output: ");
 	printHexDebug(outputState);
-	
-	printMatrixDebug(outputState);
-	printf("cool\n");
+
+	printf("Output: ");
 	vector<unsigned char> cipher = convertBack(outputState);
 	int i = 0;
 	while(i != cipher.size()){
-		printf("%c",cipher[i]);
+		printf("%x",cipher[i]);
 		i++;
 	}
-
-	//writing to .txt
-	ofstream txt;
-	txt.open("myciphertext.txt");
-	i = 0;
-	while(i != cipher.size()){
-		txt << cipher[i];
-		i++;
-	}
-	txt.close();
-	
-
-
-	//unsigned char test = 'l';
-	//printf("This Char!!! %x\n", test >> 4 & 0xf); //shift to the right and mask
-	//printf("This Char!!! %x\n", test & 0xf);//show only right 4 bits only
-
-	/*
-	 * test for bitwise shifting...mix columns
-	unsigned char story = 0x1f;
-	if(((story & 0xff) >> 7) == 1){
-		printf("Testing BITWISE SHIFTING %x", ((0xff >> 7) & 0xf));
-	}*/
-
-	//vector< vector<unsigned char> > outputStateArray = subBytes(inputStateArray, s_box);
-	//vector< vector<unsigned char> > outputStateArray2 = shiftRows(outputStateArray);
+	printf("\n");
 
 	return 0;
 }
 
 
-//The following code tests the addRoundKey Operation...Tested and works
-/*unsigned char testarr[4][4] = {
-		{0x19,0xa0,0x9a,0xe9},
-		{0x3d,0xf4,0xc6,0xf8},
-		{0xe3,0xe2,0x8d,0x48},
-		{0xbe,0x2b,0x2a,0x08}
-};*/
-/*
-unsigned char testarr[4][4] = {
-			{0x04,0xe0,0x48,0x28},
-			{0x66,0xcb,0xf8,0x06},
-			{0x81,0x19,0xd3,0x26},
-			{0xe5,0x9a,0x7a,0x4c}
-	};
-
-vector< vector<unsigned char> > inputStateArray(4, vector<unsigned char>(4));
-for(int i = 0; i<blockSize; i++){
-	for(int j = 0; j<blockSize;j++){
-		inputStateArray[i][j] = testarr[i][j];
-	}
-}
-printHexDebug(inputStateArray);
-unsigned char testarrRound[4][4] = {
-			{0xa0,0x88,0x23,0x2a},
-			{0xfa,0x54,0xa3,0x6c},
-			{0xfe,0x2c,0x39,0x76},
-			{0x17,0xb1,0x39,0x05}
-	};
-
-vector< vector<unsigned char> > testRoundkey(4, vector<unsigned char>(4));
-for(int i = 0; i<blockSize; i++){
-		for(int j = 0; j<blockSize;j++){
-			testRoundkey[i][j] = testarrRound[i][j];
-		}
-	}
-printHexDebug(testRoundkey);
-vector< vector<unsigned char> > outputStateArray = addRoundKey(inputStateArray, testRoundkey);
-printHexDebug(outputStateArray);
- */
-
-
-//The following code tests, subBytes, ShiftRows and mixColumns....Tested and All working individually.
-/*
-vector< vector<unsigned char> > inputStateArray = convertToByteArray(Plaintext, true);
-
-printf("Initail State\n");
-printMatrixDebug(inputStateArray);
-printMatrixDebug(keyBlock);
-vector< vector<unsigned char> > outputStateArray = initialRound(inputStateArray, keyBlock);
-printf("Xor with key\n");
-printHexDebug(outputStateArray);
-
-outputStateArray = subBytes(inputStateArray, s_box);
-printf("subBytes\n");
-printHexDebug(outputStateArray);
-outputStateArray = shiftRows(outputStateArray);
-printf("ShiftRows\n");
-printHexDebug(outputStateArray);
-printf("mixColumns\n");
-outputStateArray = mixColumns(outputStateArray);
-printHexDebug(outputStateArray);
- */
 
